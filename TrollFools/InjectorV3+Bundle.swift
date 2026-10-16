@@ -362,4 +362,156 @@ extension InjectorV3 {
         let values = try? target.resourceValues(forKeys: [.isDirectoryKey])
         return values?.isDirectory ?? false
     }
+
+    // MARK: - Injection Targets
+
+    /// A selectable injection host surfaced in the plug-in list.
+    struct TargetCandidate: Identifiable, Hashable {
+        let target: InjectionTarget
+        let machOURL: URL
+
+        var id: String { target.id }
+    }
+
+    /// Enumerates every Mach-O a plug-in can be pinned to:
+    /// the main executable, each framework/dylib under `Frameworks/`,
+    /// each app extension under `PlugIns/`, and the LoadControl route.
+    func availableInjectionTargets() -> [TargetCandidate] {
+        var candidates: [TargetCandidate] = []
+
+        if let executableURL, isMachO(executableURL) {
+            candidates.append(TargetCandidate(target: .mainExecutable, machOURL: executableURL))
+        }
+
+        for machO in allFrameworkMachOs() {
+            candidates.append(TargetCandidate(target: .framework(machO.lastPathComponent), machOURL: machO))
+        }
+
+        for machO in appExtensionExecutables() {
+            let bundleName = machO.deletingLastPathComponent().lastPathComponent
+            candidates.append(TargetCandidate(target: .appExtension(bundleName), machOURL: machO))
+        }
+
+        // LoadControl is always offered: it routes the plug-in through the
+        // bundled substrate loader (mirrors LCSign's `loadControl` target).
+        if let executableURL {
+            candidates.append(TargetCandidate(target: .loadControl, machOURL: executableURL))
+        }
+
+        return candidates
+    }
+
+    /// Resolves a pinned target to the concrete Mach-O that should receive the
+    /// injected load command. Returns nil when the target no longer exists.
+    func locateMachO(for target: InjectionTarget) throws -> URL? {
+        switch target {
+        case .mainExecutable:
+            return executableURL
+
+        case .loadControl:
+            // TrollFools has no dedicated LoadControl dylib; the substrate
+            // framework plays that role, so we anchor on the main executable.
+            return executableURL
+
+        case let .framework(name):
+            let url = frameworksDirectoryURL.appendingPathComponent(name)
+            guard FileManager.default.fileExists(atPath: url.path) else {
+                return nil
+            }
+            if checkIsBundle(url) {
+                return try? locateExecutableInBundle(url)
+            }
+            return isMachO(url) ? url : nil
+
+        case let .appExtension(name):
+            let appexURL = bundleURL
+                .appendingPathComponent("PlugIns", isDirectory: true)
+                .appendingPathComponent(name)
+            guard FileManager.default.fileExists(atPath: appexURL.path) else {
+                return nil
+            }
+            return executableInBundleWithoutCheck(appexURL)
+        }
+    }
+
+    /// All shell Mach-Os directly under `Frameworks/` (bare dylibs and
+    /// framework executables), ignoring protected/encrypted state.
+    func allFrameworkMachOs() -> [URL] {
+        var machOs: [URL] = []
+        guard let enumerator = FileManager.default.enumerator(
+            at: frameworksDirectoryURL,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ) else {
+            return []
+        }
+
+        for case let itemURL as URL in enumerator {
+            if itemURL.path.hasSuffix(".\(Self.alternateSuffix)") {
+                continue
+            }
+            if enumerator.level > 2 {
+                enumerator.skipDescendants()
+                continue
+            }
+
+            let itemExt = itemURL.pathExtension.lowercased()
+            if enumerator.level == 1, itemExt == "dylib", isMachO(itemURL) {
+                machOs.append(itemURL)
+            } else if enumerator.level == 2, (itemExt.isEmpty || itemExt == "dylib"), isMachO(itemURL) {
+                machOs.append(itemURL)
+            }
+        }
+
+        return machOs.sorted {
+            $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
+        }
+    }
+
+    /// Executables of every `.appex` inside `PlugIns/`.
+    func appExtensionExecutables() -> [URL] {
+        let plugInsURL = bundleURL.appendingPathComponent("PlugIns", isDirectory: true)
+        guard let contents = try? FileManager.default.contentsOfDirectory(
+            at: plugInsURL,
+            includingPropertiesForKeys: nil
+        ) else {
+            return []
+        }
+
+        return contents
+            .filter { $0.pathExtension.lowercased() == "appex" }
+            .compactMap { executableInBundleWithoutCheck($0) }
+            .sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
+    }
+
+    /// Locates the executable of a bundle without requiring `checkIsBundle`
+    /// (needed for `.appex`, which is not covered by that helper).
+    func executableInBundleWithoutCheck(_ bundleURL: URL) -> URL? {
+        if let executableURL = Bundle(url: bundleURL)?.executableURL,
+           FileManager.default.fileExists(atPath: executableURL.path)
+        {
+            return executableURL
+        }
+
+        let infoPlistURL = bundleURL.appendingPathComponent(Self.infoPlistName)
+        guard let data = try? Data(contentsOf: infoPlistURL),
+              let plist = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any],
+              let executableName = plist["CFBundleExecutable"] as? String
+        else {
+            return nil
+        }
+
+        let executableURL = bundleURL.appendingPathComponent(executableName)
+        return FileManager.default.fileExists(atPath: executableURL.path) ? executableURL : nil
+    }
+
+    /// Runtime search path to embed when injecting into `target`. App
+    /// extensions live in `PlugIns/`, so they need to walk back up to the
+    /// host app's `Frameworks/`.
+    func runtimePathForInjectionTarget(_ target: URL) -> String {
+        if target.path.contains("/PlugIns/") {
+            return "@executable_path/../../Frameworks"
+        }
+        return "@executable_path/Frameworks"
+    }
 }

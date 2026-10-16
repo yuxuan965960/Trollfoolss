@@ -315,3 +315,33 @@
 
 /* TODO */
 "You’ve selected at least one Debian Package “%@”. We’re here to remind you that it will not work as it was in a jailbroken environment. Please make sure you know what you’re doing." = "You’ve selected at least one Debian Package “%@”. We’re here to remind you that it will not work as it was in a jailbroken environment. Please make sure you know what you’re doing.";
+/* Injection target */
+"Injection Target" = "Destinazione di iniezione";
+/* Injection target */
+"Injection Target…" = "Destinazione di iniezione…";
+/* Injection target */
+"Main Executable" = "Eseguibile principale";
+/* Injection target */
+"Main" = "Principale";
+/* Injection target */
+"LoadControl" = "LoadControl";
+/* Injection target */
+"Framework" = "Framework";
+/* Injection target */
+"Framework: %@" = "Framework: %@";
+/* Injection target */
+"Extension" = "Estensione";
+/* Injection target */
+"Extension: %@" = "Estensione: %@";
+/* Injection target */
+"Default (Automatic)" = "Predefinito (automatico)";
+/* Injection target */
+"Let TrollFools pick the best matching Mach-O." = "Lascia che TrollFools scelga il Mach-O più adatto.";
+/* Injection target */
+"Attach the plug-in to the app binary." = "Collega il plug-in al binario dell'app.";
+/* Injection target */
+"Route through the bundled LoadControl loader." = "Instrada tramite il loader LoadControl integrato.";
+/* Injection target */
+"Frameworks" = "Framework";
+/* Injection target */
+"Extensions" = "Estensioni";

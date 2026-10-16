@@ -166,7 +166,7 @@ extension InjectorV3 {
     fileprivate func insertLoadCommandOfAsset(_ assetURL: URL, to target: URL) throws {
         let name = try loadCommandNameOfAsset(assetURL)
 
-        try cmdInsertLoadCommandRuntimePath(target, name: "@executable_path/Frameworks")
+        try cmdInsertLoadCommandRuntimePath(target, name: runtimePathForInjectionTarget(target))
         try cmdInsertLoadCommandDylib(target, name: name, weak: useWeakReference)
         try standardizeLoadCommandDylib(target, to: name)
     }
@@ -206,6 +206,16 @@ extension InjectorV3 {
     // MARK: - Path Finder
 
     fileprivate func locateAvailableMachO() throws -> URL? {
+        // Honor an explicit target chosen in the plug-in list.
+        if let pinned = pinnedInjectionTarget,
+           let pinnedURL = try locateMachO(for: pinned) {
+            if (try? isProtectedMachO(pinnedURL)) == false {
+                DDLogInfo("Pinned injection target: \(pinnedURL.path)", ddlog: logger)
+                return pinnedURL
+            }
+            DDLogWarn("Pinned injection target \(pinnedURL.lastPathComponent) is protected, falling back to auto", ddlog: logger)
+        }
+
         let allMachOs = try frameworkMachOsInBundle(bundleURL)
 
         DDLogInfo("Mach-O scan: \(allMachOs.count) candidates in \(bundleURL.lastPathComponent)", ddlog: logger)

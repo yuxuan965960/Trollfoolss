@@ -54,32 +54,20 @@ struct PlugInCell: View {
     }
 
     var body: some View {
-        Toggle(isOn: $isEnabled) {
-            HStack(spacing: 12) {
-                if verticalSizeClass == .compact {
-                    Image(systemName: iconName)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: 24, height: 24)
-                        .foregroundColor(.accentColor)
-                }
-
-                VStack(alignment: .leading) {
-                    if #available(iOS 15, *) {
-                        Text(highlightedName)
-                            .font(.headline)
-                            .lineLimit(2)
-                    } else {
-                        Text(plugIn.url.lastPathComponent)
-                            .font(.headline)
-                            .lineLimit(2)
-                    }
-
-                    Text(gDateFormatter.string(from: plugIn.createdAt))
-                        .font(.subheadline)
-                        .lineLimit(1)
-                }
+        HStack(spacing: 12) {
+            // Tapping the info area opens the injection-target picker.
+            Button {
+                ejectList.targetPickerPlugIn = plugIn
+            } label: {
+                labelContent
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+
+            // The switch keeps its original enable/disable behaviour.
+            Toggle("", isOn: $isEnabled)
+                .labelsHidden()
         }
         .onAppear {
             isEnabled = plugIn.isEnabled
@@ -88,6 +76,14 @@ struct PlugInCell: View {
             ejectList.togglePlugIn(plugIn, isEnabled: value)
         }
         .contextMenu {
+            Button {
+                ejectList.targetPickerPlugIn = plugIn
+            } label: {
+                Label(NSLocalizedString("Injection Target…", comment: ""), systemImage: "target")
+            }
+
+            Divider()
+
             if #available(iOS 16.4, *) {
                 ShareLink(item: plugIn.url) {
                     Label(NSLocalizedString("Export", comment: ""), systemImage: "square.and.arrow.up")
@@ -111,6 +107,59 @@ struct PlugInCell: View {
             }
             .disabled(!isFilzaInstalled)
         }
+    }
+
+    @ViewBuilder
+    private var labelContent: some View {
+        HStack(spacing: 12) {
+            if verticalSizeClass == .compact {
+                Image(systemName: iconName)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 24, height: 24)
+                    .foregroundColor(.accentColor)
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                if #available(iOS 15, *) {
+                    Text(highlightedName)
+                        .font(.headline)
+                        .lineLimit(2)
+                } else {
+                    Text(plugIn.url.lastPathComponent)
+                        .font(.headline)
+                        .lineLimit(2)
+                }
+
+                Text(gDateFormatter.string(from: plugIn.createdAt))
+                    .font(.subheadline)
+                    .lineLimit(1)
+
+                targetChip
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var targetChip: some View {
+        let title = plugIn.injectionTarget?.shortTitle
+            ?? NSLocalizedString("Default (Automatic)", comment: "Injection target")
+        let image = plugIn.injectionTarget?.systemImageName ?? "wand.and.stars"
+
+        HStack(spacing: 4) {
+            Image(systemName: image)
+            Text(title)
+            Image(systemName: "chevron.right")
+                .font(.system(size: 8, weight: .semibold))
+        }
+        .font(.caption2)
+        .foregroundColor(.accentColor)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(
+            Capsule().stroke(Color.accentColor.opacity(0.4), lineWidth: 1)
+        )
+        .lineLimit(1)
     }
 
     private func exportPlugIn() {

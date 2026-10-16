@@ -74,6 +74,15 @@ struct EjectListView: View {
             .toolbar { toolbarContent }
             .animation(.easeOut, value: isExportingAll)
             .quickLookPreview($quickLookExport)
+            .sheet(item: $ejectList.targetPickerPlugIn) { plugIn in
+                InjectionTargetPickerSheet(
+                    plugInName: plugIn.url.lastPathComponent,
+                    candidates: ejectList.availableInjectionTargets(),
+                    selected: plugIn.injectionTarget
+                ) { target in
+                    ejectList.changeTarget(target, for: plugIn)
+                }
+            }
     }
 
     @ViewBuilder
@@ -199,6 +208,33 @@ struct EjectListView: View {
                 togglePlugIn(plugIn)
             }
         }
+        .onChange(of: ejectList.retargetRequest) { request in
+            if let request {
+                applyTargetChange(request)
+            }
+        }
+    }
+
+    /// Builds an injector pre-configured with the app-level settings, and
+    /// optionally a pinned injection target.
+    private func makeInjector(pinnedTarget: InjectionTarget? = nil) throws -> InjectorV3 {
+        let injector = try InjectorV3(ejectList.app.url)
+
+        if injector.appID.isEmpty {
+            injector.appID = ejectList.app.bid
+        }
+
+        if injector.teamID.isEmpty {
+            injector.teamID = ejectList.app.teamID
+        }
+
+        injector.useWeakReference = useWeakReference
+        injector.preferMainExecutable = preferMainExecutable
+        injector.useFrameworkEnumerationFallback = useFrameworkEnumerationFallback
+        injector.injectStrategy = injectStrategy
+        injector.pinnedInjectionTarget = pinnedTarget
+
+        return injector
     }
 
     var enableAllButton: some View {
@@ -407,6 +443,7 @@ struct EjectListView: View {
             injector.preferMainExecutable = preferMainExecutable
             injector.useFrameworkEnumerationFallback = useFrameworkEnumerationFallback
             injector.injectStrategy = injectStrategy
+            injector.pinnedInjectionTarget = plugIn.injectionTarget
 
             if plugIn.isEnabled {
                 try injector.eject(plugInURLsToProcess, shouldDesist: false)
@@ -434,29 +471,55 @@ struct EjectListView: View {
         }
     }
 
+    /// Re-applies a plug-in to a newly chosen injection target.
+    private func applyTargetChange(_ request: RetargetRequest) {
+        let plugIn = request.plugIn
+        var logFileURL: URL?
+
+        do {
+            let injector = try makeInjector(pinnedTarget: request.newTarget)
+            logFileURL = injector.latestLogFileURL
+
+            // Detach from the previous host before re-attaching.
+            if plugIn.isEnabled {
+                try injector.eject([plugIn.url], shouldDesist: false)
+                try injector.inject([plugIn.url], shouldPersist: false)
+            }
+
+            ejectList.app.reload()
+            ejectList.reload()
+        } catch {
+            DDLogError("\(error)", ddlog: InjectorV3.main.logger)
+
+            var userInfo: [String: Any] = [
+                NSLocalizedDescriptionKey: error.localizedDescription,
+            ]
+
+            if let logFileURL {
+                userInfo[NSURLErrorKey] = logFileURL
+            }
+
+            let nsErr = NSError(domain: Constants.gErrorDomain, code: 0, userInfo: userInfo)
+
+            lastError = nsErr
+            isErrorOccurred = true
+        }
+
+        ejectList.retargetRequest = nil
+    }
+
     private func enableAll() {
-        let disabledPlugInURLs = ejectList.injectedPlugIns
-            .filter { !$0.isEnabled }
+        let disabledPlugIns = ejectList.injectedPlugIns.filter { !$0.isEnabled }
+        let autoPlugInURLs = disabledPlugIns
+            .filter { $0.injectionTarget == nil }
             .map { $0.url }
+        let pinnedPlugIns = disabledPlugIns.filter { $0.injectionTarget != nil }
 
         var logFileURL: URL?
 
         do {
-            let injector = try InjectorV3(ejectList.app.url)
+            let injector = try makeInjector()
             logFileURL = injector.latestLogFileURL
-
-            if injector.appID.isEmpty {
-                injector.appID = ejectList.app.bid
-            }
-
-            if injector.teamID.isEmpty {
-                injector.teamID = ejectList.app.teamID
-            }
-
-            injector.useWeakReference = useWeakReference
-            injector.preferMainExecutable = preferMainExecutable
-            injector.useFrameworkEnumerationFallback = useFrameworkEnumerationFallback
-            injector.injectStrategy = injectStrategy
 
             let view = viewControllerHost.viewController?
                 .navigationController?.view
@@ -482,7 +545,14 @@ struct EjectListView: View {
                 }
 
                 do {
-                    try injector.inject(disabledPlugInURLs, shouldPersist: false)
+                    if !autoPlugInURLs.isEmpty {
+                        try injector.inject(autoPlugInURLs, shouldPersist: false)
+                    }
+
+                    for pinnedPlugIn in pinnedPlugIns {
+                        let pinnedInjector = try self.makeInjector(pinnedTarget: pinnedPlugIn.injectionTarget)
+                        try pinnedInjector.inject([pinnedPlugIn.url], shouldPersist: false)
+                    }
                 } catch {
                     DispatchQueue.main.async {
                         DDLogError("\(error)", ddlog: InjectorV3.main.logger)

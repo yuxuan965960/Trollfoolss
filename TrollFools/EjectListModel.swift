@@ -8,6 +8,14 @@
 import Combine
 import SwiftUI
 
+/// A pending "change injection target" request raised from the plug-in list.
+/// The view observes it and re-applies the plug-in to its new host.
+struct RetargetRequest: Equatable {
+    let plugIn: InjectedPlugIn
+    let previousTarget: InjectionTarget?
+    let newTarget: InjectionTarget?
+}
+
 final class EjectListModel: ObservableObject {
     let app: App
     private(set) var injectedPlugIns: [InjectedPlugIn] = []
@@ -19,6 +27,12 @@ final class EjectListModel: ObservableObject {
     @Published var isOkToDisableAll = false
 
     @Published var processingPlugIn: InjectedPlugIn?
+
+    /// Plug-in whose injection target is currently being edited.
+    @Published var targetPickerPlugIn: InjectedPlugIn?
+
+    /// A pending target change to be applied by the view.
+    @Published var retargetRequest: RetargetRequest?
 
     private var cancellables = Set<AnyCancellable>()
 
@@ -35,14 +49,29 @@ final class EjectListModel: ObservableObject {
     }
 
     func reload() {
+        let store = InjectionTargetStore.shared
+        let bid = app.bid
+
         var plugIns = [InjectedPlugIn]()
         plugIns += InjectorV3.main.injectedAssetURLsInBundle(app.url)
-            .map { InjectedPlugIn(url: $0, isEnabled: true) }
+            .map {
+                InjectedPlugIn(
+                    url: $0,
+                    isEnabled: true,
+                    injectionTarget: store.target(forPlugInName: $0.lastPathComponent, bundleID: bid)
+                )
+            }
 
         let enabledNames = plugIns.map { $0.url.lastPathComponent }
         plugIns += InjectorV3.main.persistedAssetURLs(bid: app.bid)
             .filter { !enabledNames.contains($0.lastPathComponent) }
-            .map { InjectedPlugIn(url: $0, isEnabled: false) }
+            .map {
+                InjectedPlugIn(
+                    url: $0,
+                    isEnabled: false,
+                    injectionTarget: store.target(forPlugInName: $0.lastPathComponent, bundleID: bid)
+                )
+            }
 
         injectedPlugIns = plugIns
             .sorted { $0.url.lastPathComponent.localizedStandardCompare($1.url.lastPathComponent) == .orderedAscending }
@@ -69,5 +98,34 @@ final class EjectListModel: ObservableObject {
             return
         }
         processingPlugIn = plugIn
+    }
+
+    // MARK: - Injection Targets
+
+    /// All hosts a plug-in of this app can be pinned to.
+    func availableInjectionTargets() -> [InjectorV3.TargetCandidate] {
+        guard let injector = try? InjectorV3(app.url) else {
+            return []
+        }
+        return injector.availableInjectionTargets()
+    }
+
+    /// Persists the chosen target and asks the view to re-apply the plug-in.
+    func changeTarget(_ target: InjectionTarget?, for plugIn: InjectedPlugIn) {
+        InjectionTargetStore.shared.setTarget(
+            target,
+            forPlugInName: plugIn.url.lastPathComponent,
+            bundleID: app.bid
+        )
+
+        guard target != plugIn.injectionTarget else {
+            return
+        }
+
+        retargetRequest = RetargetRequest(
+            plugIn: plugIn,
+            previousTarget: plugIn.injectionTarget,
+            newTarget: target
+        )
     }
 }

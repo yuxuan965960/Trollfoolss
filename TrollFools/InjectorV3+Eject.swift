@@ -94,8 +94,24 @@ extension InjectorV3 {
     }
 
     fileprivate func collectModifiedMachOs() throws -> [URL] {
-        try frameworkMachOsInBundle(bundleURL)
-            .filter { hasAlternate($0) }.elements
+        var seen = Set<String>()
+        var result: [URL] = []
+
+        for machO in try frameworkMachOsInBundle(bundleURL).elements where hasAlternate(machO) {
+            if seen.insert(machO.path).inserted {
+                result.append(machO)
+            }
+        }
+
+        // App extensions can also act as injection hosts; their Mach-Os are
+        // not part of `frameworkMachOsInBundle`, so merge them in manually.
+        for machO in appExtensionExecutables() where hasAlternate(machO) {
+            if seen.insert(machO.path).inserted {
+                result.append(machO)
+            }
+        }
+
+        return result
     }
 
     // MARK: - Load Commands

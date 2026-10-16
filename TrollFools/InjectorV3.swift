@@ -38,6 +38,11 @@ final class InjectorV3 {
     var injectStrategy: Strategy = .lexicographic
     var didUseMachOEnumerationFallback: Bool = false
 
+    /// When set, injection is pinned to the concrete host Mach-O chosen in the
+    /// plug-in list (main executable / a framework / an app extension /
+    /// LoadControl) instead of the automatic best-match selection.
+    var pinnedInjectionTarget: InjectionTarget?
+
     let logger: DDLog
     let loggerType: LoggerType
 

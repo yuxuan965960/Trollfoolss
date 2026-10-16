@@ -315,3 +315,33 @@
 
 /* No comment provided by engineer. */
 "You’ve selected at least one Debian Package “%@”. We’re here to remind you that it will not work as it was in a jailbroken environment. Please make sure you know what you’re doing." = "你至少选择了一个 Debian 软件包 “%@”。请留意，它通常不会像在越狱环境当中那样工作，甚至完全不起作用。请确保你知道自己在做些什么。";
+/* Injection target */
+"Injection Target" = "注入目标";
+/* Injection target */
+"Injection Target…" = "注入目标…";
+/* Injection target */
+"Main Executable" = "主程序";
+/* Injection target */
+"Main" = "主程序";
+/* Injection target */
+"LoadControl" = "LoadControl";
+/* Injection target */
+"Framework" = "Framework";
+/* Injection target */
+"Framework: %@" = "Framework：%@";
+/* Injection target */
+"Extension" = "插件扩展";
+/* Injection target */
+"Extension: %@" = "插件扩展：%@";
+/* Injection target */
+"Default (Automatic)" = "默认（自动）";
+/* Injection target */
+"Let TrollFools pick the best matching Mach-O." = "由 TrollFools 自动选择最匹配的 Mach-O。";
+/* Injection target */
+"Attach the plug-in to the app binary." = "将插件挂载到主程序二进制。";
+/* Injection target */
+"Route through the bundled LoadControl loader." = "通过内置的 LoadControl 加载器进行注入。";
+/* Injection target */
+"Frameworks" = "Framework";
+/* Injection target */
+"Extensions" = "插件扩展";
