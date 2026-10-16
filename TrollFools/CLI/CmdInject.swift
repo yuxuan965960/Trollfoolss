@@ -17,8 +17,11 @@ struct CmdInject: ParsableCommand {
     @Argument(help: "The bundle identifier of the application.")
     var bundleIdentifier: String
 
-    @Option(name: [.customLong("path"), .customShort("p")], parsing: .upToNextOption, help: "The path of the plugin.")
+    @Option(name: [.customLong("path"), .customShort("p")], parsing: .upToNextOption, help: "The path of the plugin. A .dylib / .framework / .bundle / .deb / .zip package is accepted.")
     var pluginPaths: [String]
+
+    @Option(name: [.customLong("target")], help: "Pin the plug-in to a concrete host: auto | main | loadcontrol | framework:<name> | extension:<name>. Defaults to auto.")
+    var target: String?
 
     @Flag(name: [.customLong("fast")], help: "Use fast injection strategy.")
     var fastInjection: Bool = false
@@ -52,6 +55,60 @@ struct CmdInject: ParsableCommand {
         }
         injector.useWeakReference = weakReference
         injector.injectStrategy = fastInjection ? .fast : .lexicographic
+        injector.pinnedInjectionTarget = try Self.parseInjectionTarget(target)
         try injector.inject(pluginURLs, shouldPersist: false)
+    }
+
+    /// Parses the `--target` value into a concrete `InjectionTarget`.
+    ///
+    /// Accepted forms:
+    /// - `auto` (or empty) — keep the automatic best-match behaviour
+    /// - `main` — the app's main executable (「主程序」)
+    /// - `loadcontrol` — route through the bundled LoadControl loader
+    /// - `framework:<name>` — a concrete Mach-O under `Frameworks/`
+    ///   (e.g. `framework:OpenSSL.framework` or `framework:Foo.dylib`)
+    /// - `extension:<name>` — a plug-in under `PlugIns/`
+    ///   (e.g. `extension:LCShareExtension.appex`)
+    private static func parseInjectionTarget(_ raw: String?) throws -> InjectionTarget? {
+        guard let raw = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
+            return nil
+        }
+
+        let lowered = raw.lowercased()
+        switch lowered {
+        case "auto", "default", "automatic", "none":
+            return nil
+        case "main", "mainexecutable":
+            return .mainExecutable
+        case "loadcontrol", "load-controller", "load_control":
+            return .loadControl
+        default:
+            break
+        }
+
+        if let value = value(of: "framework", in: raw) {
+            guard !value.isEmpty else {
+                throw ArgumentParser.ValidationError("Missing framework name, expected framework:<name>.")
+            }
+            return .framework(value)
+        }
+
+        if let value = value(of: "extension", in: raw) ?? value(of: "appex", in: raw) {
+            guard !value.isEmpty else {
+                throw ArgumentParser.ValidationError("Missing extension name, expected extension:<name>.")
+            }
+            return .appExtension(value)
+        }
+
+        // A bare value is treated as a framework / dylib name.
+        return .framework(raw)
+    }
+
+    private static func value(of key: String, in raw: String) -> String? {
+        let prefix = key.lowercased() + ":"
+        guard raw.lowercased().hasPrefix(prefix) else {
+            return nil
+        }
+        return String(raw.dropFirst(prefix.count))
     }
 }
