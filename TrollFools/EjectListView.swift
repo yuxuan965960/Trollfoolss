@@ -480,10 +480,21 @@ struct EjectListView: View {
             let injector = try makeInjector(pinnedTarget: request.newTarget)
             logFileURL = injector.latestLogFileURL
 
-            // Detach from the previous host before re-attaching.
             if plugIn.isEnabled {
+                // `eject` deletes the asset from the bundle, so stage a copy
+                // first and re-inject from that copy afterwards.
+                let stagingDir = InjectorV3.temporaryRoot
+                    .appendingPathComponent("Retarget_\(UUID().uuidString)", isDirectory: true)
+                try FileManager.default.createDirectory(at: stagingDir, withIntermediateDirectories: true)
+
+                let stagedURL = stagingDir.appendingPathComponent(plugIn.url.lastPathComponent)
+                try FileManager.default.copyItem(at: plugIn.url, to: stagedURL)
+
+                // Detach from the previous host before re-attaching.
                 try injector.eject([plugIn.url], shouldDesist: false)
-                try injector.inject([plugIn.url], shouldPersist: false)
+                try injector.inject([stagedURL], shouldPersist: false)
+
+                try? FileManager.default.removeItem(at: stagingDir)
             }
 
             ejectList.app.reload()

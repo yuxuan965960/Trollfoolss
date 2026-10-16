@@ -384,7 +384,13 @@ extension InjectorV3 {
         }
 
         for machO in allFrameworkMachOs() {
-            candidates.append(TargetCandidate(target: .framework(machO.lastPathComponent), machOURL: machO))
+            // A framework bundle's executable lives in `Foo.framework/Foo`, so
+            // store the bundle name (`Foo.framework`) to keep it resolvable.
+            let parent = machO.deletingLastPathComponent()
+            let name = parent.pathExtension.lowercased() == "framework"
+                ? parent.lastPathComponent
+                : machO.lastPathComponent
+            candidates.append(TargetCandidate(target: .framework(name), machOURL: machO))
         }
 
         for machO in appExtensionExecutables() {
