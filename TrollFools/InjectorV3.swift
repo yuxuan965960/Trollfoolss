@@ -37,6 +37,10 @@ final class InjectorV3 {
     var useFrameworkEnumerationFallback: Bool = true
     var injectStrategy: Strategy = .lexicographic
     var didUseMachOEnumerationFallback: Bool = false
+    /// When set, payloads that hard-link system symbols missing from the
+    /// running OS are rewritten in place before injection, so dyld no longer
+    /// aborts the host app at launch (see `InjectorV3+Compat`).
+    var repairsIncompatibleSymbols: Bool = true
 
     /// When set, injection is pinned to the concrete host Mach-O chosen in the
     /// plug-in list (main executable / a framework / an app extension /

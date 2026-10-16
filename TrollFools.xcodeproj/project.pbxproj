@@ -17,6 +17,8 @@
 		6124A07D2CD233A700C52253 /* InjectedPlugIn.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6124A07C2CD233A700C52253 /* InjectedPlugIn.swift */; };
 		0A1B2C3D4E5F60718293B001 /* InjectionTarget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A1B2C3D4E5F60718293A001 /* InjectionTarget.swift */; };
 		0A1B2C3D4E5F60718293C001 /* InjectionTarget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A1B2C3D4E5F60718293A001 /* InjectionTarget.swift */; };
+		0A1B2C3D4E5F60718293B004 /* InjectorV3+Compat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A1B2C3D4E5F60718293A004 /* InjectorV3+Compat.swift */; };
+		0A1B2C3D4E5F60718293C004 /* InjectorV3+Compat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A1B2C3D4E5F60718293A004 /* InjectorV3+Compat.swift */; };
 		0A1B2C3D4E5F60718293B002 /* InjectionTargetStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A1B2C3D4E5F60718293A002 /* InjectionTargetStore.swift */; };
 		0A1B2C3D4E5F60718293B003 /* InjectionTargetPickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A1B2C3D4E5F60718293A003 /* InjectionTargetPickerSheet.swift */; };
 		6124A07F2CD233BA00C52253 /* PlugInCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6124A07E2CD233BA00C52253 /* PlugInCell.swift */; };
@@ -159,6 +161,7 @@
 		0A1B2C3D4E5F60718293A001 /* InjectionTarget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InjectionTarget.swift; sourceTree = "<group>"; };
 		0A1B2C3D4E5F60718293A002 /* InjectionTargetStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InjectionTargetStore.swift; sourceTree = "<group>"; };
 		0A1B2C3D4E5F60718293A003 /* InjectionTargetPickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "InjectionTargetPickerSheet.swift"; sourceTree = "<group>"; };
+		0A1B2C3D4E5F60718293A004 /* InjectorV3+Compat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "InjectorV3+Compat.swift"; sourceTree = "<group>"; };
 		6124A07E2CD233BA00C52253 /* PlugInCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlugInCell.swift; sourceTree = "<group>"; };
 		6124A0802CD233DA00C52253 /* EjectListModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EjectListModel.swift; sourceTree = "<group>"; };
 		614C0C382D7C243E007E9184 /* trollfoolscli */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = trollfoolscli; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -353,6 +356,7 @@
 				CCD3FCB72E70948A00AEF7F0 /* InjectorV3+Persistent.swift */,
 				61EFA3742D303C3700159442 /* InjectorV3+Preprocess.swift */,
 				0A1B2C3D4E5F60718293A001 /* InjectionTarget.swift */,
+				0A1B2C3D4E5F60718293A004 /* InjectorV3+Compat.swift */,
 			);
 			name = Core;
 			sourceTree = "<group>";
@@ -658,6 +662,7 @@
 				614C0C5C2D7C2E98007E9184 /* InjectorV3+Bundle.swift in Sources */,
 				CC8A36752D7EB92800BE90D3 /* CmdView.swift in Sources */,
 				614C0C5D2D7C2E98007E9184 /* InjectorV3+Preprocess.swift in Sources */,
+				0A1B2C3D4E5F60718293C004 /* InjectorV3+Compat.swift in Sources */,
 				614C0C5E2D7C2E98007E9184 /* InjectorV3+Error.swift in Sources */,
 				614C0C5F2D7C2E98007E9184 /* InjectorV3.swift in Sources */,
 			);
@@ -695,6 +700,7 @@
 				61EFA3792D3108BD00159442 /* InjectorV3+Eject.swift in Sources */,
 				6124A07B2CD2337500C52253 /* ViewControllerHost.swift in Sources */,
 				61EFA3752D303C3C00159442 /* InjectorV3+Preprocess.swift in Sources */,
+				0A1B2C3D4E5F60718293B004 /* InjectorV3+Compat.swift in Sources */,
 				CCF4705A2C4A4649008D8197 /* TrollFoolsApp.swift in Sources */,
 				6124A0812CD233DA00C52253 /* EjectListModel.swift in Sources */,
 				CC19E4BB2C561D7300E0F1B5 /* SettingsView.swift in Sources */,

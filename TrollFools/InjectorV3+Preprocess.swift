@@ -79,6 +79,13 @@ extension InjectorV3 {
             }
         }
 
+        // Rewrite payloads that hard-link system symbols missing from this OS,
+        // otherwise dyld aborts the host app at launch (Symbol not found).
+        // Done before signing, so the rewritten bytes are covered by the signature.
+        for preparedURL in preparedAssetURLs {
+            repairIncompatibleSymbols(in: preparedURL)
+        }
+
         try markBundlesAsInjected(urlsToMarkAsInjected, privileged: false)
 
         preparedAssetURLs.removeAll(where: { Self.ignoredDylibAndFrameworkNames.contains($0.lastPathComponent.lowercased()) })
