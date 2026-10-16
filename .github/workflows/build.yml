@@ -1,0 +1,148 @@
+name: Build TrollFools
+
+# ============================================================================
+#  一键云端构建（GitHub Actions · macOS runner + Theos）
+#
+#  触发方式：
+#    1) 手动一键构建：仓库 Actions → 左侧 "Build TrollFools" → Run workflow
+#    2) 推送到 release 分支：自动构建并发布 Release
+#    3) 推送 v* 标签：自动构建并发布 Release
+#
+#  产物：TrollFools_<版本>.tipa、*.deb、dSYM
+# ============================================================================
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - release
+    tags:
+      - 'v*'
+
+# 发布 Release 需要写权限（新版仓库 token 默认只读，必须显式声明）
+permissions:
+  contents: write
+
+# 同一分支/标签只保留最新一次构建，避免并发跑重复任务
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  THEOS: ""
+  VERSION: "0.0.0-0"
+
+jobs:
+  build:
+    name: Build package
+    runs-on: macos-14
+
+    steps:
+      # ----------------------------------------------------------------------
+      # 1. 选择 Xcode（与项目 Theos 版本兼容）
+      # ----------------------------------------------------------------------
+      - name: Select Xcode 15.4
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '15.4'
+
+      # ----------------------------------------------------------------------
+      # 2. 检出本仓库
+      # ----------------------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ----------------------------------------------------------------------
+      # 3. 从 Version.xcconfig 读取版本号，供文件名 / Release 使用
+      # ----------------------------------------------------------------------
+      - name: Resolve version
+        run: |
+          VERSION_FILE="TrollFools/Version.xcconfig"
+          VERSION_MAIN=$(grep -E '^VERSION' "$VERSION_FILE" | cut -d'=' -f2 | tr -d '[:space:]')
+          VERSION_BUILD=$(grep -E '^BUILD_NUMBER' "$VERSION_FILE" | cut -d'=' -f2 | tr -d '[:space:]')
+          echo "VERSION=${VERSION_MAIN}-${VERSION_BUILD}" >> "$GITHUB_ENV"
+          echo "Resolved version: ${VERSION_MAIN}-${VERSION_BUILD}"
+
+      # ----------------------------------------------------------------------
+      # 4. 安装构建依赖（dpkg=打包 .deb，ldid=签名，make，xcbeautify=日志美化）
+      # ----------------------------------------------------------------------
+      - name: Install build dependencies
+        run: |
+          echo /opt/homebrew/opt/make/libexec/gnubin >> "$GITHUB_PATH"
+          echo /usr/local/opt/make/libexec/gnubin >> "$GITHUB_PATH"
+          HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 \
+            brew install dpkg ldid-procursus make xcbeautify openssl@3
+
+      # ----------------------------------------------------------------------
+      # 5. 检出 Theos（锁定 commit，保证可复现）
+      # ----------------------------------------------------------------------
+      - name: Checkout Theos
+        uses: actions/checkout@v4
+        with:
+          repository: theos/theos
+          ref: 942cd0c015f93d8c2d714ba0c69e7f420157c382
+          path: theos
+          submodules: recursive
+
+      # ----------------------------------------------------------------------
+      # 6. 配置 Theos 环境变量（rootless + 最终包 + 不构建 dSYM 之外的多余物）
+      # ----------------------------------------------------------------------
+      - name: Configure Theos
+        run: |
+          rm -rf "$GITHUB_WORKSPACE/theos/sdks"
+          echo "THEOS=$GITHUB_WORKSPACE/theos" >> "$GITHUB_ENV"
+          echo "THEOS_PACKAGE_SCHEME=rootless" >> "$GITHUB_ENV"
+          echo "FINALPACKAGE=1" >> "$GITHUB_ENV"
+
+      # ----------------------------------------------------------------------
+      # 7. 检出 iOS SDK（Theos 构建必需）
+      # ----------------------------------------------------------------------
+      - name: Checkout iOS SDKs
+        uses: actions/checkout@v4
+        with:
+          repository: theos/sdks
+          ref: master
+          path: theos/sdks
+
+      # ----------------------------------------------------------------------
+      # 8. 构建（Makefile 的 after-package 会调用 devkit/tipa.sh 生成 .tipa）
+      # ----------------------------------------------------------------------
+      - name: Build packages
+        run: |
+          make package
+          cp packages/*.tipa .
+          cp packages/*.deb .
+          # dSYM 可能不存在，失败不阻断构建
+          find .theos/obj -name '*.dSYM' -exec cp -r {} . \; || true
+          echo "--- 产物列表 ---"
+          ls -lh *.tipa *.deb 2>/dev/null || true
+
+      # ----------------------------------------------------------------------
+      # 9. 上传构建产物（可在 Actions 页面直接下载）
+      # ----------------------------------------------------------------------
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: TrollFools-${{ env.VERSION }}
+          path: |
+            *.tipa
+            *.deb
+            *.dSYM
+          if-no-files-found: error
+          retention-days: 30
+
+      # ----------------------------------------------------------------------
+      # 10. 打标签 / release 分支时，自动创建 GitHub Release
+      # ----------------------------------------------------------------------
+      - name: Create release
+        if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/release'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION }}
+          name: TrollFools ${{ env.VERSION }}
+          body_path: CHANGELOG.md
+          draft: false
+          prerelease: false
+          files: |
+            *.tipa
+            *.deb
