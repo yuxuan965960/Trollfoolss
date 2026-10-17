@@ -25,6 +25,10 @@ extension InjectorV3 {
         var urlsToMarkAsInjected = [URL]()
 
         for assetURL in assetURLs {
+            // Never treat macOS archive metadata as a plug-in.
+            if Self.isArchiveMetadataPath(assetURL) {
+                continue
+            }
             let lowerExt = assetURL.pathExtension.lowercased()
             if lowerExt == "zip" || lowerExt == "deb" {
                 let extractedURL = temporaryDirectoryURL
@@ -45,6 +49,14 @@ extension InjectorV3 {
                     options: [.skipsHiddenFiles, .skipsPackageDescendants]
                 ) {
                     while let item = enumerator.nextObject() as? URL {
+                        // `__MACOSX/…`, `._*` and `.DS_Store` are AppleDouble
+                        // metadata that macOS adds when zipping. They mirror the
+                        // real tree (including `*.framework` folders) but are
+                        // empty shells without Info.plist or an executable.
+                        if Self.isArchiveMetadataPath(item) {
+                            enumerator.skipDescendants()
+                            continue
+                        }
                         let itemExt = item.pathExtension.lowercased()
                         guard Self.allowedPathExtensions.contains(itemExt) else {
                             continue
@@ -79,6 +91,10 @@ extension InjectorV3 {
             }
         }
 
+        // Safety net: never keep macOS metadata entries as plug-ins.
+        preparedAssetURLs.removeAll(where: { Self.isArchiveMetadataPath($0) })
+        urlsToMarkAsInjected.removeAll(where: { Self.isArchiveMetadataPath($0) })
+
         // Rewrite payloads that hard-link system symbols missing from this OS,
         // otherwise dyld aborts the host app at launch (Symbol not found).
         // Done before signing, so the rewritten bytes are covered by the signature.
@@ -94,6 +110,23 @@ extension InjectorV3 {
         }
 
         return preparedAssetURLs
+    }
+
+    /// Whether the URL is macOS archive metadata (`__MACOSX/…`, `._*`,
+    /// `.DS_Store`) that Apple's Archive Utility injects when zipping.
+    ///
+    /// Such entries mirror the real tree — including empty `*.framework`
+    /// directories — but contain no `Info.plist` or executable, so they must
+    /// never be treated as plug-ins.
+    fileprivate static func isArchiveMetadataPath(_ url: URL) -> Bool {
+        if url.pathComponents.contains("__MACOSX") {
+            return true
+        }
+        let name = url.lastPathComponent
+        if name.hasPrefix("._") || name == ".DS_Store" {
+            return true
+        }
+        return false
     }
 }
 
