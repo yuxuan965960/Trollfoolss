@@ -268,19 +268,13 @@ extension InjectorV3 {
             return bundleIdentifier
         }
 
-        let infoPlistURL = target.appendingPathComponent(Self.infoPlistName)
-        let infoPlistData = try Data(contentsOf: infoPlistURL)
-
-        guard let infoPlist = try PropertyListSerialization.propertyList(from: infoPlistData, options: [], format: nil) as? [String: Any]
-        else {
-            throw Error.generic(String(format: NSLocalizedString("Failed to parse: %@", comment: ""), infoPlistURL.path))
+        if let infoPlist = Self.infoPlistDictionary(ofBundleAt: target),
+           let bundleIdentifier = infoPlist["CFBundleIdentifier"] as? String
+        {
+            return bundleIdentifier
         }
 
-        guard let bundleIdentifier = infoPlist["CFBundleIdentifier"] as? String else {
-            throw Error.generic(String(format: NSLocalizedString("Failed to find entry CFBundleIdentifier in: %@", comment: ""), infoPlistURL.path))
-        }
-
-        return bundleIdentifier
+        throw Error.generic(String(format: NSLocalizedString("Failed to find entry CFBundleIdentifier in: %@", comment: ""), target.path))
     }
 
     func locateFrameworksDirectoryInBundle(_ target: URL) throws -> URL {
@@ -297,28 +291,110 @@ extension InjectorV3 {
     func locateExecutableInBundle(_ target: URL) throws -> URL {
         precondition(checkIsBundle(target), "Not a bundle: \(target.path)")
 
-        if let executableURL = Bundle(url: target)?.executableURL {
+        // 1) A well-formed bundle lets Foundation find its executable directly.
+        if let executableURL = Bundle(url: target)?.executableURL,
+           isExecutableMachO(executableURL)
+        {
             return executableURL
         }
 
-        let infoPlistURL = target.appendingPathComponent(Self.infoPlistName)
-        let infoPlistData = try Data(contentsOf: infoPlistURL)
+        let baseName = target.deletingPathExtension().lastPathComponent
 
-        guard let infoPlist = try PropertyListSerialization.propertyList(from: infoPlistData, options: [], format: nil) as? [String: Any]
-        else {
-            throw Error.generic(String(format: NSLocalizedString("Failed to parse: %@", comment: ""), infoPlistURL.path))
+        // 2) `CFBundleExecutable` taken from any conventional Info.plist location.
+        if let name = Self.infoPlistDictionary(ofBundleAt: target)?["CFBundleExecutable"] as? String,
+           let url = executable(named: name, in: target, baseName: baseName)
+        {
+            return url
         }
 
-        guard let executableName = infoPlist["CFBundleExecutable"] as? String else {
-            throw Error.generic(String(format: NSLocalizedString("Failed to find entry CFBundleExecutable in: %@", comment: ""), infoPlistURL.path))
+        // 3) Convention: `Foo.framework/Foo`, `Foo.app/Foo`, `Foo.appex/Foo`.
+        if let url = executable(named: baseName, in: target, baseName: baseName) {
+            return url
         }
 
-        let executableURL = target.appendingPathComponent(executableName)
-        guard FileManager.default.fileExists(atPath: executableURL.path) else {
-            throw Error.generic(String(format: NSLocalizedString("Failed to locate main executable: %@", comment: ""), executableURL.path))
+        // 4) Last resort: the first Mach-O found inside the bundle.
+        if let url = firstMachO(in: target) {
+            DDLogWarn("Falling back to first Mach-O \(url.lastPathComponent) in \(target.lastPathComponent)", ddlog: logger)
+            return url
         }
 
-        return executableURL
+        DDLogError("Unable to locate executable in \(target.path) (Info.plist may be missing or broken)", ddlog: logger)
+        throw Error.generic(String(format: NSLocalizedString("Failed to locate main executable: %@", comment: ""), target.path))
+    }
+
+    /// Whether `url` is a regular file that MachOKit can parse.
+    fileprivate func isExecutableMachO(_ url: URL) -> Bool {
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else {
+            return false
+        }
+        if isDirectory.boolValue {
+            return false
+        }
+        return isMachO(url)
+    }
+
+    /// Resolves an executable inside `target` by name, tolerating the flat (iOS)
+    /// and versioned (macOS) framework layouts.
+    fileprivate func executable(named name: String, in target: URL, baseName: String) -> URL? {
+        let candidates = [
+            target.appendingPathComponent(name),
+            target.appendingPathComponent("Versions/Current/\(name)"),
+            target.appendingPathComponent("Versions/A/\(name)"),
+        ]
+        for url in candidates where isExecutableMachO(url) {
+            return url
+        }
+        // The framework executable is usually named exactly like the framework.
+        if name != baseName {
+            let fallback = target.appendingPathComponent(baseName)
+            if isExecutableMachO(fallback) {
+                return fallback
+            }
+        }
+        return nil
+    }
+
+    /// First Mach-O directly inside `target` (used as a last-resort fallback).
+    fileprivate func firstMachO(in target: URL) -> URL? {
+        guard let enumerator = FileManager.default.enumerator(
+            at: target,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return nil
+        }
+        for case let item as URL in enumerator {
+            if enumerator.level > 2 {
+                enumerator.skipDescendants()
+                continue
+            }
+            if isExecutableMachO(item) {
+                return item
+            }
+        }
+        return nil
+    }
+
+    /// Reads `Info.plist` from the common bundle layouts, returning nil instead
+    /// of throwing when it is missing or malformed.
+    fileprivate static func infoPlistDictionary(ofBundleAt target: URL) -> [String: Any]? {
+        let candidates = [
+            target.appendingPathComponent("Info.plist"),
+            target.appendingPathComponent("Resources/Info.plist"),
+            target.appendingPathComponent("Versions/Current/Resources/Info.plist"),
+            target.appendingPathComponent("Versions/A/Resources/Info.plist"),
+            target.appendingPathComponent("Versions/A/Info.plist"),
+        ]
+        for url in candidates {
+            guard let data = try? Data(contentsOf: url),
+                  let plist = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any]
+            else {
+                continue
+            }
+            return plist
+        }
+        return nil
     }
 
     func checkIsEligibleAppBundle(_ target: URL) -> Bool {
@@ -493,22 +569,25 @@ extension InjectorV3 {
     /// Locates the executable of a bundle without requiring `checkIsBundle`
     /// (needed for `.appex`, which is not covered by that helper).
     func executableInBundleWithoutCheck(_ bundleURL: URL) -> URL? {
+        let baseName = bundleURL.deletingPathExtension().lastPathComponent
+
         if let executableURL = Bundle(url: bundleURL)?.executableURL,
-           FileManager.default.fileExists(atPath: executableURL.path)
+           isExecutableMachO(executableURL)
         {
             return executableURL
         }
 
-        let infoPlistURL = bundleURL.appendingPathComponent(Self.infoPlistName)
-        guard let data = try? Data(contentsOf: infoPlistURL),
-              let plist = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any],
-              let executableName = plist["CFBundleExecutable"] as? String
-        else {
-            return nil
+        if let name = Self.infoPlistDictionary(ofBundleAt: bundleURL)?["CFBundleExecutable"] as? String,
+           let url = executable(named: name, in: bundleURL, baseName: baseName)
+        {
+            return url
         }
 
-        let executableURL = bundleURL.appendingPathComponent(executableName)
-        return FileManager.default.fileExists(atPath: executableURL.path) ? executableURL : nil
+        if let url = executable(named: baseName, in: bundleURL, baseName: baseName) {
+            return url
+        }
+
+        return firstMachO(in: bundleURL)
     }
 
     /// Runtime search path to embed when injecting into `target`. App
