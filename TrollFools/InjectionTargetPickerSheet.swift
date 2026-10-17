@@ -76,7 +76,7 @@ struct InjectionTargetPickerSheet: View {
                         ForEach(frameworks) { candidate in
                             row(
                                 title: candidate.target.localizedTitle,
-                                subtitle: candidate.machOURL.lastPathComponent,
+                                subtitle: nil,
                                 systemImage: "shippingbox",
                                 isSelected: selected == candidate.target
                             ) {
@@ -92,7 +92,7 @@ struct InjectionTargetPickerSheet: View {
                         ForEach(extensions) { candidate in
                             row(
                                 title: candidate.target.localizedTitle,
-                                subtitle: candidate.machOURL.lastPathComponent,
+                                subtitle: nil,
                                 systemImage: "puzzlepiece.extension",
                                 isSelected: selected == candidate.target
                             ) {

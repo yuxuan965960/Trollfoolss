@@ -86,17 +86,29 @@ extension InjectionTarget: Identifiable {
     }
 
     /// Full, human readable name shown in the picker.
+    ///
+    /// Frameworks and extensions are displayed by their base name only, e.g.
+    /// `Foo.framework` → `Foo` and `Bar.appex` → `Bar`. The bundle extension is
+    /// intentionally hidden because the surrounding section already tells the
+    /// user what kind of target it is.
     var localizedTitle: String {
         switch self {
         case .mainExecutable:
             return NSLocalizedString("Main Executable", comment: "Injection target")
         case let .framework(name):
-            return String(format: NSLocalizedString("Framework: %@", comment: "Injection target"), name)
+            return Self.displayName(of: name)
         case .loadControl:
             return NSLocalizedString("LoadControl", comment: "Injection target")
         case let .appExtension(name):
-            return String(format: NSLocalizedString("Extension: %@", comment: "Injection target"), name)
+            return Self.displayName(of: name)
         }
+    }
+
+    /// Strips the trailing bundle extension for display purposes only.
+    /// `Foo.framework` → `Foo`, `Bar.appex` → `Bar`, `Baz.dylib` → `Baz`.
+    static func displayName(of name: String) -> String {
+        let base = (name as NSString).deletingPathExtension
+        return base.isEmpty ? name : base
     }
 
     /// Compact name used by the plug-in list badge.
